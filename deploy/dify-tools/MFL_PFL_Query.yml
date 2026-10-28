@@ -1,0 +1,241 @@
+app:
+  name: MFL_PFL_Query
+  description: SYN-ICP-9000合成资料工具；需完成平台导入与真实联调
+  mode: workflow
+  icon: 🔎
+  icon_background: '#EFF6FF'
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.0
+workflow:
+  conversation_variables: []
+  environment_variables:
+  - id: service-url
+    name: TOOL_SERVICE_URL
+    description: 后端内部工具地址
+    selector:
+    - env
+    - TOOL_SERVICE_URL
+    value: http://host.docker.internal:8000
+    value_type: string
+  - id: tool-token
+    name: INTERNAL_TOOL_TOKEN
+    description: 从本机.env填写，禁止提交或截图
+    selector:
+    - env
+    - INTERNAL_TOOL_TOKEN
+    value: ''
+    value_type: secret
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    text_to_speech:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+  graph:
+    nodes:
+    - id: start
+      type: custom
+      position:
+        x: 0
+        y: 100
+      positionAbsolute:
+        x: 0
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: start
+        title: 输入
+        desc: ''
+        selected: false
+        variables:
+        - label: input
+          variable: input
+          type: paragraph
+          required: true
+          max_length: 16000
+          options: []
+      sourcePosition: right
+      targetPosition: left
+    - id: encode
+      type: custom
+      position:
+        x: 300
+        y: 100
+      positionAbsolute:
+        x: 300
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: code
+        title: 安全编码请求
+        desc: ''
+        selected: false
+        code_language: python3
+        code: "import json\ndef main(input: str) -> dict:\n    return {'body': json.dumps({'input':\
+          \ input}, ensure_ascii=False)}\n"
+        variables:
+        - variable: input
+          value_selector:
+          - start
+          - input
+        outputs:
+          body:
+            type: string
+            children: null
+      sourcePosition: right
+      targetPosition: left
+    - id: request
+      type: custom
+      position:
+        x: 600
+        y: 100
+      positionAbsolute:
+        x: 600
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: http-request
+        title: MFL_PFL_Query
+        desc: ''
+        selected: false
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/MFL_PFL_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#encode.body#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: false
+          max_retries: 0
+          retry_interval: 100
+        variables: []
+      sourcePosition: right
+      targetPosition: left
+    - id: decode
+      type: custom
+      position:
+        x: 900
+        y: 100
+      positionAbsolute:
+        x: 900
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: code
+        title: 校验返回
+        desc: ''
+        selected: false
+        code_language: python3
+        code: "import json\ndef main(body: str) -> dict:\n    value = json.loads(body)\n\
+          \    result = value['result']\n    parsed = json.loads(result)\n    if 'status'\
+          \ not in parsed:\n        raise ValueError('Tool result missing status')\n\
+          \    return {'result': result}\n"
+        variables:
+        - variable: body
+          value_selector:
+          - request
+          - body
+        outputs:
+          result:
+            type: string
+            children: null
+      sourcePosition: right
+      targetPosition: left
+    - id: end
+      type: custom
+      position:
+        x: 1200
+        y: 100
+      positionAbsolute:
+        x: 1200
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: end
+        title: 输出工具结果
+        desc: ''
+        selected: false
+        outputs:
+        - variable: result
+          value_selector:
+          - decode
+          - result
+      sourcePosition: right
+      targetPosition: left
+    edges:
+    - id: start-encode
+      type: custom
+      source: start
+      sourceHandle: source
+      target: encode
+      targetHandle: target
+      data:
+        sourceType: start
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: encode-request
+      type: custom
+      source: encode
+      sourceHandle: source
+      target: request
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: request-decode
+      type: custom
+      source: request
+      sourceHandle: source
+      target: decode
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: decode-end
+      type: custom
+      source: decode
+      sourceHandle: source
+      target: end
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: end
+        isInIteration: false
+        isInLoop: false
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.6

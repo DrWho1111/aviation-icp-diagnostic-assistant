@@ -1,0 +1,16 @@
+# Offline rebuild: reuse a verified dependency image and build frontend/dist first.
+# Current application code and data are copied into a fresh working directory.
+ARG ICP_RUNTIME_IMAGE=icp-workbench-app:latest
+FROM ${ICP_RUNTIME_IMAGE}
+WORKDIR /icp
+COPY requirements-lock.txt ./
+RUN python -c "import importlib.metadata as m; from pathlib import Path; rows=[r.strip().split('==') for r in Path('requirements-lock.txt').read_text().splitlines() if r.strip() and not r.startswith('#')]; bad=[name for name,version in rows if m.version(name)!=version]; assert not bad, 'Dependency versions differ: '+', '.join(bad)"
+COPY backend/ ./backend/
+COPY scripts/ ./scripts/
+COPY data/processed/ ./data/processed/
+COPY data/raw/documents/ ./data/raw/documents/
+COPY outputs/evaluation.json ./outputs/evaluation.json
+COPY frontend/dist/ ./frontend/dist/
+ENV PYTHONPATH=/icp/backend PYTHONUNBUFFERED=1
+EXPOSE 8000
+CMD ["python","scripts/container_start.py"]

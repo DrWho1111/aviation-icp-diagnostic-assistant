@@ -1,0 +1,143 @@
+app:
+  name: ICP_Native_Pause_Probe
+  description: SYN-ICP-9000合成资料工具；需完成平台导入与真实联调
+  mode: workflow
+  icon: 🔎
+  icon_background: '#EFF6FF'
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    text_to_speech:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+  graph:
+    nodes:
+    - id: start
+      type: custom
+      position:
+        x: 0
+        y: 100
+      positionAbsolute:
+        x: 0
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: start
+        title: 输入
+        desc: ''
+        selected: false
+        variables: []
+      sourcePosition: right
+      targetPosition: left
+    - id: confirm
+      type: custom
+      position:
+        x: 300
+        y: 100
+      positionAbsolute:
+        x: 300
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: human-input
+        title: 测试确认
+        form_content: 请选择测试功能 {{#$output.function_id#}}
+        inputs:
+        - type: select
+          output_variable_name: function_id
+          option_source:
+            type: constant
+            value:
+            - FUNC-410
+            - FUNC-420
+        user_actions:
+        - id: approve
+          title: 确认
+          button_style: primary
+        delivery_methods:
+        - type: webapp
+          enabled: true
+          config: {}
+        timeout: 1
+        timeout_unit: hour
+      sourcePosition: right
+      targetPosition: left
+    - id: end
+      type: custom
+      position:
+        x: 600
+        y: 100
+      positionAbsolute:
+        x: 600
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: end
+        title: 结束
+        outputs:
+        - variable: result
+          value_selector:
+          - confirm
+          - function_id
+          value_type: string
+      sourcePosition: right
+      targetPosition: left
+    edges:
+    - id: start-source-confirm
+      source: start
+      target: confirm
+      sourceHandle: source
+      targetHandle: target
+      type: custom
+      data:
+        sourceType: start
+        targetType: human-input
+        isInIteration: false
+        isInLoop: false
+    - id: confirm-approve-end
+      source: confirm
+      target: end
+      sourceHandle: approve
+      targetHandle: target
+      type: custom
+      data:
+        sourceType: human-input
+        targetType: end
+        isInIteration: false
+        isInLoop: false
+    - id: confirm-timeout-end
+      source: confirm
+      target: end
+      sourceHandle: timeout
+      targetHandle: target
+      type: custom
+      data:
+        sourceType: human-input
+        targetType: end
+        isInIteration: false
+        isInLoop: false
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.6

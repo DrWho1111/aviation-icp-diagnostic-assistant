@@ -1,0 +1,9 @@
+# Opt in only after bootstrap_native_workflows.py and native acceptance pass.
+services:
+  app:
+    environment:
+      DIFY_NATIVE_MAIN_KEYS_FILE: /run/secrets/native_main
+    secrets: [native_main]
+secrets:
+  native_main:
+    file: ../.secrets/dify-native-main-production.json

@@ -1,0 +1,10 @@
+[project]
+name = "icp-diagnostic-workbench"
+version = "0.1.0"
+requires-python = ">=3.12"
+description = "Source-grounded SYN-ICP-9000 diagnostic prototype"
+
+[tool.pytest.ini_options]
+pythonpath = ["backend", "."]
+testpaths = ["tests"]
+

@@ -1,0 +1,233 @@
+app:
+  name: ICP_Native_Loop_Pause_Probe
+  description: SYN-ICP-9000合成资料工具；需完成平台导入与真实联调
+  mode: workflow
+  icon: 🔎
+  icon_background: '#EFF6FF'
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    text_to_speech:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+  graph:
+    nodes:
+    - id: start
+      type: custom
+      position:
+        x: 0
+        y: 100
+      positionAbsolute:
+        x: 0
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: start
+        title: 输入
+        desc: ''
+        selected: false
+        variables: []
+      sourcePosition: right
+      targetPosition: left
+    - id: loop
+      type: custom
+      position:
+        x: 300
+        y: 100
+      positionAbsolute:
+        x: 300
+        y: 100
+      width: 950
+      height: 400
+      data:
+        selected: false
+        desc: ''
+        type: loop
+        title: 原生循环
+        start_node_id: loop-start
+        loop_count: 1
+        break_conditions: []
+        logical_operator: and
+        loop_variables:
+        - label: selected
+          var_type: string
+          value_type: constant
+          value: ''
+      sourcePosition: right
+      targetPosition: left
+    - id: loop-start
+      type: custom
+      position:
+        x: 40
+        y: 100
+      positionAbsolute:
+        x: 40
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: loop-start
+        title: 循环开始
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: confirm
+      type: custom
+      position:
+        x: 300
+        y: 100
+      positionAbsolute:
+        x: 300
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: human-input
+        title: 测试确认
+        form_content: 请选择测试功能 {{#$output.function_id#}}
+        inputs:
+        - type: select
+          output_variable_name: function_id
+          option_source:
+            type: constant
+            value:
+            - FUNC-410
+            - FUNC-420
+        user_actions:
+        - id: approve
+          title: 确认
+          button_style: primary
+        delivery_methods:
+        - type: webapp
+          enabled: true
+          config: {}
+        timeout: 1
+        timeout_unit: hour
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: assign
+      type: custom
+      position:
+        x: 600
+        y: 100
+      positionAbsolute:
+        x: 600
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: assigner
+        version: '2'
+        title: 保存确认值
+        items:
+        - variable_selector:
+          - loop
+          - selected
+          input_type: variable
+          operation: over-write
+          value:
+          - confirm
+          - function_id
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: end
+      type: custom
+      position:
+        x: 600
+        y: 100
+      positionAbsolute:
+        x: 600
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: end
+        title: 结束
+        outputs:
+        - variable: result
+          value_selector:
+          - loop
+          - selected
+          value_type: string
+      sourcePosition: right
+      targetPosition: left
+    edges:
+    - id: start-source-loop
+      source: start
+      target: loop
+      sourceHandle: source
+      targetHandle: target
+      type: custom
+      data:
+        sourceType: start
+        targetType: loop
+        isInIteration: false
+        isInLoop: false
+    - id: loop-source-end
+      source: loop
+      target: end
+      sourceHandle: source
+      targetHandle: target
+      type: custom
+      data:
+        sourceType: loop
+        targetType: end
+        isInIteration: false
+        isInLoop: false
+    - id: loop-start-source-confirm
+      source: loop-start
+      target: confirm
+      sourceHandle: source
+      targetHandle: target
+      type: custom
+      data:
+        sourceType: loop-start
+        targetType: human-input
+        isInIteration: false
+        isInLoop: true
+    - id: confirm-approve-assign
+      source: confirm
+      target: assign
+      sourceHandle: approve
+      targetHandle: target
+      type: custom
+      data:
+        sourceType: human-input
+        targetType: assigner
+        isInIteration: false
+        isInLoop: true
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.6

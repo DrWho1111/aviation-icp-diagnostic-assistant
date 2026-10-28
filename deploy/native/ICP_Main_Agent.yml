@@ -1,0 +1,1667 @@
+app:
+  name: ICP_Native_ReAct_Validation
+  description: SYN-ICP-9000合成资料工具；需完成平台导入与真实联调
+  mode: workflow
+  icon: 🔎
+  icon_background: '#EFF6FF'
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.0
+workflow:
+  conversation_variables: []
+  environment_variables:
+  - id: service-url
+    name: TOOL_SERVICE_URL
+    description: 后端内部工具地址
+    selector:
+    - env
+    - TOOL_SERVICE_URL
+    value: http://host.docker.internal:8000
+    value_type: string
+  - id: tool-token
+    name: INTERNAL_TOOL_TOKEN
+    description: 从本机.env填写，禁止提交或截图
+    selector:
+    - env
+    - INTERNAL_TOOL_TOKEN
+    value: ''
+    value_type: secret
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    text_to_speech:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+  graph:
+    nodes:
+    - id: start
+      type: custom
+      position:
+        x: 0
+        y: 100
+      positionAbsolute:
+        x: 0
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: start
+        title: 输入
+        desc: ''
+        selected: false
+        variables:
+        - label: input
+          variable: input
+          type: paragraph
+          required: true
+          max_length: 16000
+          options: []
+      sourcePosition: right
+      targetPosition: left
+    - id: init
+      type: custom
+      position:
+        x: 100
+        y: 100
+      positionAbsolute:
+        x: 100
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 绑定应用任务
+        code_language: python3
+        code: "import json\ndef main(input: str):\n p=json.loads(input)\n return {'root':p['root_run_id'],'body':json.dumps({'input':json.dumps({'root_run_id':p['root_run_id']})})}\n"
+        variables:
+        - variable: input
+          value_selector:
+          - start
+          - input
+        outputs:
+          root:
+            type: string
+            children: null
+          body:
+            type: string
+            children: null
+      sourcePosition: right
+      targetPosition: left
+    - id: loop
+      type: custom
+      position: &id001
+        x: 700
+        y: 100
+      positionAbsolute: *id001
+      width: 4900
+      height: 860
+      data:
+        selected: false
+        desc: ''
+        type: loop
+        title: 单工具ReAct循环（最多12轮）
+        start_node_id: loop-start
+        loop_count: 12
+        logical_operator: and
+        break_conditions:
+        - variable_selector:
+          - loop
+          - done
+          comparison_operator: is
+          value: '1'
+        loop_variables:
+        - label: done
+          var_type: string
+          value_type: constant
+          value: '0'
+      sourcePosition: right
+      targetPosition: left
+    - id: loop-start
+      type: custom
+      position:
+        x: 40
+        y: 70
+      positionAbsolute:
+        x: 740
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: loop-start
+        title: 本轮开始
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: plan
+      type: custom
+      position:
+        x: 360
+        y: 70
+      positionAbsolute:
+        x: 1060
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: plan
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/react/plan'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#init.body#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: decision
+      type: custom
+      position:
+        x: 680
+        y: 70
+      positionAbsolute:
+        x: 1380
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 读取经校验的单工具决策
+        code_language: python3
+        code: "import json\ndef main(body: str):\n p=json.loads(json.loads(body)['result'])\n\
+          \ return {'kind':p['kind'],'action_id':p.get('action_id',''),'diagnosis_input':p.get('diagnosis_input','{}'),'note':p.get('note','')}\n"
+        variables:
+        - variable: body
+          value_selector:
+          - plan
+          - body
+        outputs:
+          kind:
+            type: string
+            children: null
+          action_id:
+            type: string
+            children: null
+          diagnosis_input:
+            type: string
+            children: null
+          note:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: dispatch
+      type: custom
+      position:
+        x: 1000
+        y: 70
+      positionAbsolute:
+        x: 1700
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: if-else
+        title: 只执行本轮相关动作
+        cases:
+        - case_id: done
+          logical_operator: and
+          conditions:
+          - variable_selector:
+            - decision
+            - kind
+            comparison_operator: is
+            value: done
+        - case_id: execute
+          logical_operator: and
+          conditions:
+          - variable_selector:
+            - decision
+            - kind
+            comparison_operator: is
+            value: execute
+        - case_id: diagnosis
+          logical_operator: and
+          conditions:
+          - variable_selector:
+            - decision
+            - kind
+            comparison_operator: is
+            value: diagnosis
+        - case_id: input
+          logical_operator: and
+          conditions:
+          - variable_selector:
+            - decision
+            - kind
+            comparison_operator: is
+            value: input
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: action_body
+      type: custom
+      position:
+        x: 1320
+        y: 70
+      positionAbsolute:
+        x: 2020
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 绑定本轮动作
+        code_language: python3
+        code: 'import json
+
+          def main(root: str, action: str):return {''body'':json.dumps({''input'':json.dumps({''root_run_id'':root,''action_id'':action})})}
+
+          '
+        variables:
+        - variable: root
+          value_selector:
+          - init
+          - root
+        - variable: action
+          value_selector:
+          - decision
+          - action_id
+        outputs:
+          body:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: execute
+      type: custom
+      position:
+        x: 1640
+        y: 580
+      positionAbsolute:
+        x: 2340
+        y: 680
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: execute
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/react/execute'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#action_body.body#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: executed
+      type: custom
+      position:
+        x: 1960
+        y: 410
+      positionAbsolute:
+        x: 2660
+        y: 510
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 记录观察后继续
+        code_language: python3
+        code: 'import json
+
+          def main(body: str):return {''done'':json.loads(json.loads(body)[''result''])[''done'']}
+
+          '
+        variables:
+        - variable: body
+          value_selector:
+          - execute
+          - body
+        outputs:
+          done:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: finished
+      type: custom
+      position:
+        x: 1320
+        y: 580
+      positionAbsolute:
+        x: 2020
+        y: 680
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 信息足够或边界停止
+        code_language: python3
+        code: def main():return {'done':'1'}
+        variables: []
+        outputs:
+          done:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: additional
+      type: custom
+      position:
+        x: 1320
+        y: 240
+      positionAbsolute:
+        x: 2020
+        y: 340
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: human-input
+        title: 缺参先询问
+        form_content: '{{#decision.note#}}
+
+          {{#$output.additional_input#}}'
+        inputs:
+        - type: paragraph
+          output_variable_name: additional_input
+        user_actions:
+        - id: supply
+          title: 补充后继续
+          button_style: primary
+        delivery_methods:
+        - type: webapp
+          enabled: true
+          config: {}
+        timeout: 24
+        timeout_unit: hour
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: continue
+      type: custom
+      position:
+        x: 1640
+        y: 240
+      positionAbsolute:
+        x: 2340
+        y: 340
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: continue
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/react/continue'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#init.body#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: continued
+      type: custom
+      position:
+        x: 1960
+        y: 70
+      positionAbsolute:
+        x: 2660
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 补参后进入下一轮
+        code_language: python3
+        code: 'def main(body: str):return {''done'':''0''}'
+        variables:
+        - variable: body
+          value_selector:
+          - continue
+          - body
+        outputs:
+          done:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_input
+      type: custom
+      position:
+        x: 1320
+        y: 410
+      positionAbsolute:
+        x: 2020
+        y: 510
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 定位请求
+        code_language: python3
+        code: "import json\ndef main(input: str):\n try:p=json.loads(input)\n except\
+          \ json.JSONDecodeError:p={'query':input}\n if isinstance(p,str):p={'query':p}\n\
+          \ if not isinstance(p,dict) or not isinstance(p.get('query'),str) or not\
+          \ p['query'].strip():raise ValueError('Nonempty diagnostic question required')\n\
+          \ return {'body':json.dumps({'input':json.dumps({'query':p['query']},ensure_ascii=False)},ensure_ascii=False),'query':p['query']}\n"
+        variables:
+        - variable: input
+          value_selector:
+          - decision
+          - diagnosis_input
+        outputs:
+          body:
+            type: string
+            children: null
+          query:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_locate
+      type: custom
+      position:
+        x: 1640
+        y: 410
+      positionAbsolute:
+        x: 2340
+        y: 510
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: Function_Locator
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/Function_Locator'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#diag_input.body#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_located
+      type: custom
+      position:
+        x: 1960
+        y: 240
+      positionAbsolute:
+        x: 2660
+        y: 340
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 候选与原始来源
+        code_language: python3
+        code: "import json\ndef main(body: str):\n r=json.loads(json.loads(body)['result'])\n\
+          \ if r['status']!='ok' or len(r['data'])!=3:raise ValueError('Three sourced\
+          \ candidates required')\n return {'ids':[x['id'] for x in r['data']],'candidates':json.dumps(r,ensure_ascii=False)}\n"
+        variables:
+        - variable: body
+          value_selector:
+          - diag_locate
+          - body
+        outputs:
+          ids:
+            type: array[string]
+            children: null
+          candidates:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_confirm
+      type: custom
+      position:
+        x: 2280
+        y: 410
+      positionAbsolute:
+        x: 2980
+        y: 510
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: human-input
+        title: 用户确认失效功能
+        form_content: '请根据现象确认功能。
+
+          {{#diag_located.candidates#}}
+
+          {{#$output.function_id#}}'
+        inputs:
+        - type: select
+          output_variable_name: function_id
+          option_source:
+            type: variable
+            selector:
+            - diag_located
+            - ids
+            value: []
+        user_actions:
+        - id: approve
+          title: 确认并检索
+          button_style: primary
+        delivery_methods:
+        - type: webapp
+          enabled: true
+          config: {}
+        timeout: 24
+        timeout_unit: hour
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_arguments
+      type: custom
+      position:
+        x: 2600
+        y: 70
+      positionAbsolute:
+        x: 3300
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 确认后准备分支
+        code_language: python3
+        code: "import json\ndef main(function_id: str, candidates: str, query: str):\n\
+          \ located=json.loads(candidates)\n function=next(r for r in located['data']\
+          \ if r['id']==function_id)\n out={'function':json.dumps(function,ensure_ascii=False),'version':located['corpus_version']}\n\
+          \ for n in ['FTA_Query','FMECA_Query','RBD_Query','Fault_History_Query']:\n\
+          \  q=function_id if n in ['FTA_Query','RBD_Query'] else query\n  out[n]=json.dumps({'input':json.dumps({'query':q,'function_id':function_id},ensure_ascii=False)},ensure_ascii=False)\n\
+          \ return out\n"
+        variables:
+        - variable: function_id
+          value_selector:
+          - diag_confirm
+          - function_id
+        - variable: candidates
+          value_selector:
+          - diag_located
+          - candidates
+        - variable: query
+          value_selector:
+          - diag_input
+          - query
+        outputs:
+          function:
+            type: string
+            children: null
+          version:
+            type: string
+            children: null
+          FTA_Query:
+            type: string
+            children: null
+          FMECA_Query:
+            type: string
+            children: null
+          RBD_Query:
+            type: string
+            children: null
+          Fault_History_Query:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_FTA_Query
+      type: custom
+      position:
+        x: 2920
+        y: 240
+      positionAbsolute:
+        x: 3620
+        y: 340
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: FTA_Query
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/FTA_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#diag_arguments.FTA_Query#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        error_strategy: default-value
+        default_value:
+        - key: body
+          type: string
+          value: '{"result": "{\"status\": \"error\", \"data\": [], \"evidence\":
+            [], \"missing_fields\": [], \"coverage\": {}, \"error\": \"分支服务重试后仍未完成\"}"}'
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_FMECA_Query
+      type: custom
+      position:
+        x: 2920
+        y: 70
+      positionAbsolute:
+        x: 3620
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: FMECA_Query
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/FMECA_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#diag_arguments.FMECA_Query#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        error_strategy: default-value
+        default_value:
+        - key: body
+          type: string
+          value: '{"result": "{\"status\": \"error\", \"data\": [], \"evidence\":
+            [], \"missing_fields\": [], \"coverage\": {}, \"error\": \"分支服务重试后仍未完成\"}"}'
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_RBD_Query
+      type: custom
+      position:
+        x: 2920
+        y: 580
+      positionAbsolute:
+        x: 3620
+        y: 680
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: RBD_Query
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/RBD_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#diag_arguments.RBD_Query#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        error_strategy: default-value
+        default_value:
+        - key: body
+          type: string
+          value: '{"result": "{\"status\": \"error\", \"data\": [], \"evidence\":
+            [], \"missing_fields\": [], \"coverage\": {}, \"error\": \"分支服务重试后仍未完成\"}"}'
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_Fault_History_Query
+      type: custom
+      position:
+        x: 2920
+        y: 410
+      positionAbsolute:
+        x: 3620
+        y: 510
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: Fault_History_Query
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/Fault_History_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#diag_arguments.Fault_History_Query#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        error_strategy: default-value
+        default_value:
+        - key: body
+          type: string
+          value: '{"result": "{\"status\": \"error\", \"data\": [], \"evidence\":
+            [], \"missing_fields\": [], \"coverage\": {}, \"error\": \"分支服务重试后仍未完成\"}"}'
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: diag_merge
+      type: custom
+      position:
+        x: 3240
+        y: 70
+      positionAbsolute:
+        x: 3940
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 合并四路实际结果
+        code_language: python3
+        code: "import json\ndef main(function: str, version: str, fta: str, fmeca:\
+          \ str, rbd: str, history: str):\n names=['FTA_Query','FMECA_Query','RBD_Query','Fault_History_Query']\n\
+          \ values=[]\n for body in [fta,fmeca,rbd,history]:\n  try:\n   v=json.loads(json.loads(body)['result'])\n\
+          \   if not isinstance(v,dict) or v.get('status') not in ['ok','not_found','not_covered','error','needs_input']\
+          \ or not isinstance(v.get('evidence'),list):raise ValueError('Invalid branch\
+          \ shape')\n   if v['status']=='error' and not v.get('corpus_version'):v['corpus_version']=version\n\
+          \   if v.get('corpus_version')!=version:raise ValueError('Knowledge version\
+          \ differs')\n  except (ValueError,KeyError,TypeError):\n   v={'status':'error','data':[],'evidence':[],'missing_fields':[],'coverage':{},'error':'分支返回格式或知识版本校验失败','corpus_version':version}\n\
+          \  values.append(v)\n failed=[n for n,v in zip(names,values) if v['status']=='error']\n\
+          \ missing=[n for n,v in zip(names,values) if v['status']=='needs_input']\n\
+          \ result={'status':'error' if failed else 'needs_input' if missing else\
+          \ 'ok','data':{'function':json.loads(function),'branches':dict(zip(names,values))},\n\
+          \  'evidence':list({e['id']:e for v in values for e in v['evidence']}.values()),'missing_fields':[],\n\
+          \  'coverage':{n:v['status'] for n,v in zip(names,values)},'error':'、'.join(failed)\
+          \ if failed else None,'corpus_version':version}\n return {'result':json.dumps(result,ensure_ascii=False)}\n"
+        variables:
+        - variable: function
+          value_selector:
+          - diag_arguments
+          - function
+        - variable: version
+          value_selector:
+          - diag_arguments
+          - version
+        - variable: fta
+          value_selector:
+          - diag_FTA_Query
+          - body
+        - variable: fmeca
+          value_selector:
+          - diag_FMECA_Query
+          - body
+        - variable: rbd
+          value_selector:
+          - diag_RBD_Query
+          - body
+        - variable: history
+          value_selector:
+          - diag_Fault_History_Query
+          - body
+        outputs:
+          result:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: observation
+      type: custom
+      position:
+        x: 3560
+        y: 70
+      positionAbsolute:
+        x: 4260
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 提交四路实际观察
+        code_language: python3
+        code: 'import json
+
+          def main(root: str, action: str, result: str):return {''body'':json.dumps({''input'':json.dumps({''root_run_id'':root,''action_id'':action,''result'':result},ensure_ascii=False)},ensure_ascii=False)}
+
+          '
+        variables:
+        - variable: root
+          value_selector:
+          - init
+          - root
+        - variable: action
+          value_selector:
+          - decision
+          - action_id
+        - variable: result
+          value_selector:
+          - diag_merge
+          - result
+        outputs:
+          body:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: observe
+      type: custom
+      position:
+        x: 3880
+        y: 70
+      positionAbsolute:
+        x: 4580
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: observe
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/react/observe'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#observation.body#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: observed
+      type: custom
+      position:
+        x: 4200
+        y: 70
+      positionAbsolute:
+        x: 4900
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 根据分支状态继续或停止
+        code_language: python3
+        code: 'import json
+
+          def main(body: str):return {''done'':json.loads(json.loads(body)[''result''])[''done'']}
+
+          '
+        variables:
+        - variable: body
+          value_selector:
+          - observe
+          - body
+        outputs:
+          done:
+            type: string
+            children: null
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: assign-executed
+      type: custom
+      position:
+        x: 2280
+        y: 240
+      positionAbsolute:
+        x: 2980
+        y: 340
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: assigner
+        version: '2'
+        title: 更新循环停止条件
+        items:
+        - variable_selector:
+          - loop
+          - done
+          input_type: variable
+          operation: over-write
+          value:
+          - executed
+          - done
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: assign-finished
+      type: custom
+      position:
+        x: 1640
+        y: 70
+      positionAbsolute:
+        x: 2340
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: assigner
+        version: '2'
+        title: 更新循环停止条件
+        items:
+        - variable_selector:
+          - loop
+          - done
+          input_type: variable
+          operation: over-write
+          value:
+          - finished
+          - done
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: assign-continued
+      type: custom
+      position:
+        x: 2280
+        y: 70
+      positionAbsolute:
+        x: 2980
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: assigner
+        version: '2'
+        title: 更新循环停止条件
+        items:
+        - variable_selector:
+          - loop
+          - done
+          input_type: variable
+          operation: over-write
+          value:
+          - continued
+          - done
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: assign-observed
+      type: custom
+      position:
+        x: 4520
+        y: 70
+      positionAbsolute:
+        x: 5220
+        y: 170
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: assigner
+        version: '2'
+        title: 更新循环停止条件
+        items:
+        - variable_selector:
+          - loop
+          - done
+          input_type: variable
+          operation: over-write
+          value:
+          - observed
+          - done
+        loop_id: loop
+      sourcePosition: right
+      targetPosition: left
+      parentId: loop
+      extent: parent
+    - id: end
+      type: custom
+      position: &id002
+        x: 5900
+        y: 100
+      positionAbsolute: *id002
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: end
+        title: 任务状态已持久化
+        outputs:
+        - variable: root_run_id
+          value_selector:
+          - init
+          - root
+      sourcePosition: right
+      targetPosition: left
+    edges:
+    - id: diag_input-source-locate
+      type: custom
+      source: diag_input
+      sourceHandle: source
+      target: diag_locate
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: diag_locate-source-located
+      type: custom
+      source: diag_locate
+      sourceHandle: source
+      target: diag_located
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: diag_located-source-confirm
+      type: custom
+      source: diag_located
+      sourceHandle: source
+      target: diag_confirm
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: human-input
+        isInIteration: false
+        isInLoop: true
+    - id: diag_confirm-approve-arguments
+      type: custom
+      source: diag_confirm
+      sourceHandle: approve
+      target: diag_arguments
+      targetHandle: target
+      data:
+        sourceType: human-input
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: diag_arguments-source-FTA_Query
+      type: custom
+      source: diag_arguments
+      sourceHandle: source
+      target: diag_FTA_Query
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: diag_FTA_Query-source-merge
+      type: custom
+      source: diag_FTA_Query
+      sourceHandle: source
+      target: diag_merge
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: diag_arguments-source-FMECA_Query
+      type: custom
+      source: diag_arguments
+      sourceHandle: source
+      target: diag_FMECA_Query
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: diag_FMECA_Query-source-merge
+      type: custom
+      source: diag_FMECA_Query
+      sourceHandle: source
+      target: diag_merge
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: diag_arguments-source-RBD_Query
+      type: custom
+      source: diag_arguments
+      sourceHandle: source
+      target: diag_RBD_Query
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: diag_RBD_Query-source-merge
+      type: custom
+      source: diag_RBD_Query
+      sourceHandle: source
+      target: diag_merge
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: diag_arguments-source-Fault_History_Query
+      type: custom
+      source: diag_arguments
+      sourceHandle: source
+      target: diag_Fault_History_Query
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: diag_Fault_History_Query-source-merge
+      type: custom
+      source: diag_Fault_History_Query
+      sourceHandle: source
+      target: diag_merge
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: start-source-init
+      type: custom
+      source: start
+      sourceHandle: source
+      target: init
+      targetHandle: target
+      data:
+        sourceType: start
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: init-source-loop
+      type: custom
+      source: init
+      sourceHandle: source
+      target: loop
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: loop
+        isInIteration: false
+        isInLoop: false
+    - id: loop-source-end
+      type: custom
+      source: loop
+      sourceHandle: source
+      target: end
+      targetHandle: target
+      data:
+        sourceType: loop
+        targetType: end
+        isInIteration: false
+        isInLoop: false
+    - id: loop-start-source-plan
+      type: custom
+      source: loop-start
+      sourceHandle: source
+      target: plan
+      targetHandle: target
+      data:
+        sourceType: loop-start
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: plan-source-decision
+      type: custom
+      source: plan
+      sourceHandle: source
+      target: decision
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: decision-source-dispatch
+      type: custom
+      source: decision
+      sourceHandle: source
+      target: dispatch
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: if-else
+        isInIteration: false
+        isInLoop: true
+    - id: action_body-source-execute
+      type: custom
+      source: action_body
+      sourceHandle: source
+      target: execute
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: execute-source-executed
+      type: custom
+      source: execute
+      sourceHandle: source
+      target: executed
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: continue-source-continued
+      type: custom
+      source: continue
+      sourceHandle: source
+      target: continued
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: diag_merge-source-observation
+      type: custom
+      source: diag_merge
+      sourceHandle: source
+      target: observation
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: observation-source-observe
+      type: custom
+      source: observation
+      sourceHandle: source
+      target: observe
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: observe-source-observed
+      type: custom
+      source: observe
+      sourceHandle: source
+      target: observed
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: dispatch-done-finished
+      type: custom
+      source: dispatch
+      sourceHandle: done
+      target: finished
+      targetHandle: target
+      data:
+        sourceType: if-else
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: dispatch-execute-action_body
+      type: custom
+      source: dispatch
+      sourceHandle: execute
+      target: action_body
+      targetHandle: target
+      data:
+        sourceType: if-else
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: dispatch-diagnosis-diag_input
+      type: custom
+      source: dispatch
+      sourceHandle: diagnosis
+      target: diag_input
+      targetHandle: target
+      data:
+        sourceType: if-else
+        targetType: code
+        isInIteration: false
+        isInLoop: true
+    - id: dispatch-input-additional
+      type: custom
+      source: dispatch
+      sourceHandle: input
+      target: additional
+      targetHandle: target
+      data:
+        sourceType: if-else
+        targetType: human-input
+        isInIteration: false
+        isInLoop: true
+    - id: additional-supply-continue
+      type: custom
+      source: additional
+      sourceHandle: supply
+      target: continue
+      targetHandle: target
+      data:
+        sourceType: human-input
+        targetType: http-request
+        isInIteration: false
+        isInLoop: true
+    - id: executed-source-assign-executed
+      type: custom
+      source: executed
+      sourceHandle: source
+      target: assign-executed
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: assigner
+        isInIteration: false
+        isInLoop: true
+    - id: finished-source-assign-finished
+      type: custom
+      source: finished
+      sourceHandle: source
+      target: assign-finished
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: assigner
+        isInIteration: false
+        isInLoop: true
+    - id: continued-source-assign-continued
+      type: custom
+      source: continued
+      sourceHandle: source
+      target: assign-continued
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: assigner
+        isInIteration: false
+        isInLoop: true
+    - id: observed-source-assign-observed
+      type: custom
+      source: observed
+      sourceHandle: source
+      target: assign-observed
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: assigner
+        isInIteration: false
+        isInLoop: true
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.6

@@ -1,0 +1,26 @@
+# Private configuration and local data
+.env
+.env.*
+!.env.example
+.secrets/
+.models/
+.tools/
+.venv/
+data/
+outputs/
+output/
+tmp/
+*.sqlite*
+*.db
+*.log
+*.pdf
+*.docx
+*.zip
+# Generated build/cache files
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+__pycache__/
+.pytest_cache/
+.DS_Store
+Thumbs.db

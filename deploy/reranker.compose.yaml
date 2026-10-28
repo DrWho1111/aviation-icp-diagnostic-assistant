@@ -1,0 +1,16 @@
+name: icp-reranker
+services:
+  reranker:
+    image: icp-reranker:local
+    build:
+      context: ..
+      dockerfile: deploy/reranker.Dockerfile
+    ports: ["127.0.0.1:9390:9390"]
+    volumes:
+      - ../.models/bge-reranker-v2-m3:/models/bge-reranker-v2-m3:ro
+    environment:
+      RERANK_CPU_THREADS: "4"
+      TOKENIZERS_PARALLELISM: "false"
+      HF_HUB_OFFLINE: "1"
+    mem_limit: 4g
+    restart: unless-stopped

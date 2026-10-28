@@ -1,0 +1,18 @@
+{
+  "dify": {
+    "repository": "https://github.com/langgenius/dify",
+    "tag": "1.17.1",
+    "archive_url": "https://codeload.github.com/langgenius/dify/zip/refs/tags/1.17.1",
+    "archive_sha256": "ddac31cac40410ef266aab2610e2b1402849808ae2457747bb08981d678fe9f4",
+    "scope": "docker assets and upstream license",
+    "files": 83
+  },
+  "ragflow": {
+    "repository": "https://github.com/infiniflow/ragflow",
+    "tag": "v0.27.2",
+    "archive_url": "https://codeload.github.com/infiniflow/ragflow/zip/refs/tags/v0.27.2",
+    "archive_sha256": "161ed2bc2ff28e8bdf8ec4e14e67db6c1e373313749c869f7b3d002496cab08c",
+    "scope": "docker assets and upstream license",
+    "files": 26
+  }
+}

@@ -1,0 +1,18 @@
+import {useEffect,useMemo,useState} from 'react'
+import {ChevronLeft,ChevronRight,FileText,Search} from 'lucide-react'
+
+type Item={id:string;name:string;kind:string;fields:Record<string,unknown>;evidence_ids:string[]}
+const kinds:Record<string,string>={hmc:'HMC故障码',fmeca:'FMECA失效模式',mfl:'MFL维修清单',history:'历史故障案例',function:'系统功能',module:'物理模块',subsystem:'子系统'}
+const fields:Record<string,string>={lcn:'LCN',hamc:'HAMC',hsc:'HSC',maintenance:'维修措施',cause:'可能原因',stage:'任务阶段',local_effect:'局部影响',final_effect:'最终影响',severity:'严重度',probability_class:'概率等级（非数值概率）',detection:'检测方法',mitigation:'补偿措施',description:'说明',confirmed_cause:'该历史案例已确认原因',solution:'该历史案例处理方法',direct_report:'是否可直接上报',api_name:'文档中的设备API名称',validation_status:'资料中的验证状态',module_mode:'模块级故障',board_mode:'板级故障',circuit_mode:'电路级故障',parent_id:'父功能',module:'所属模块',alias:'资料别名',content:'案例说明',function_name:'功能名称',mode:'失效模式'}
+
+export function RecordBrowser({onEvidence}:{onEvidence:(id:string)=>Promise<void>}){
+ const [kind,setKind]=useState('hmc'),[items,setItems]=useState<Item[]>([]),[query,setQuery]=useState(''),[page,setPage]=useState(0),[loading,setLoading]=useState(false),[error,setError]=useState('')
+ useEffect(()=>{let disposed=false;setLoading(true);setItems([]);setError('');fetch('/api/records/'+kind).then(async response=>{if(!response.ok)throw new Error('结构记录暂时无法读取，请切换分类重试');return response.json()}).then(value=>{if(!disposed)setItems(value)}).catch(e=>{if(!disposed)setError(e.message)}).finally(()=>{if(!disposed)setLoading(false)});return()=>{disposed=true}},[kind])
+ const filtered=useMemo(()=>{const text=query.trim().toLowerCase();return items.filter(item=>!text||[item.id,item.name,JSON.stringify(item.fields)].join(' ').toLowerCase().includes(text))},[items,query])
+ const pages=Math.max(1,Math.ceil(filtered.length/10))
+ async function showEvidence(id:string){setError('');try{await onEvidence(id)}catch{setError('证据暂时无法打开，请稍后重试。')}}
+ return <section className="record-browser" aria-label="结构记录检索"><h2>结构记录检索</h2><p>直接查看整理后的原始事实，无需等待模型回答。历史案例中的原因仅代表该案例。</p>
+  <div className="record-controls"><label>资料类别<select aria-label="结构记录类别" value={kind} onChange={e=>{setKind(e.target.value);setQuery('');setPage(0)}}>{Object.entries(kinds).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label className="record-search"><Search size={16}/><input aria-label="搜索结构记录" placeholder="搜索编号、名称、现象或措施" value={query} onChange={e=>{setQuery(e.target.value);setPage(0)}}/></label></div>
+  {error&&<p role="alert">{error}</p>}{loading?<p role="status">正在读取记录…</p>:<><div className="record-count">共 {items.length} 条，匹配 {filtered.length} 条</div><div className="record-items">{filtered.slice(page*10,(page+1)*10).map(item=><details className="record-entry" key={item.id}><summary><code>{item.id}</code><strong>{item.name}</strong><span>查看详情</span></summary><dl>{Object.entries(item.fields).filter(([key,value])=>fields[key]&&value!==null&&typeof value!=='object').map(([key,value])=><div key={key}><dt>{fields[key]}</dt><dd>{String(value)}</dd></div>)}</dl>{item.evidence_ids[0]&&<button className="secondary" onClick={()=>showEvidence(item.evidence_ids[0])}><FileText size={15}/>查看原始证据</button>}</details>)}</div>{!filtered.length&&<p className="record-empty">没有找到匹配记录，请更换关键词或类别。</p>}<div className="record-pagination"><button className="secondary" aria-label="结构记录上一页" disabled={page===0} onClick={()=>setPage(page-1)}><ChevronLeft size={16}/>上一页</button><span>第 {page+1} / {pages} 页</span><button className="secondary" aria-label="结构记录下一页" disabled={page+1>=pages} onClick={()=>setPage(page+1)}>下一页<ChevronRight size={16}/></button></div></>}
+ </section>
+}

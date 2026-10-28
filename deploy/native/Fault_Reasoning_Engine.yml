@@ -1,0 +1,710 @@
+app:
+  name: ICP_Native_Diagnosis_Validation
+  description: SYN-ICP-9000合成资料工具；需完成平台导入与真实联调
+  mode: workflow
+  icon: 🔎
+  icon_background: '#EFF6FF'
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.0
+workflow:
+  conversation_variables: []
+  environment_variables:
+  - id: service-url
+    name: TOOL_SERVICE_URL
+    description: 后端内部工具地址
+    selector:
+    - env
+    - TOOL_SERVICE_URL
+    value: http://host.docker.internal:8000
+    value_type: string
+  - id: tool-token
+    name: INTERNAL_TOOL_TOKEN
+    description: 从本机.env填写，禁止提交或截图
+    selector:
+    - env
+    - INTERNAL_TOOL_TOKEN
+    value: ''
+    value_type: secret
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    text_to_speech:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+  graph:
+    nodes:
+    - id: start
+      type: custom
+      position:
+        x: 0
+        y: 100
+      positionAbsolute:
+        x: 0
+        y: 100
+      width: 244
+      height: 100
+      data:
+        type: start
+        title: 输入
+        desc: ''
+        selected: false
+        variables:
+        - label: input
+          variable: input
+          type: paragraph
+          required: true
+          max_length: 16000
+          options: []
+      sourcePosition: right
+      targetPosition: left
+    - id: input
+      type: custom
+      position:
+        x: 300
+        y: 100
+      positionAbsolute:
+        x: 300
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 定位请求
+        code_language: python3
+        code: "import json\ndef main(input: str):\n try:p=json.loads(input)\n except\
+          \ json.JSONDecodeError:p={'query':input}\n if isinstance(p,str):p={'query':p}\n\
+          \ if not isinstance(p,dict) or not isinstance(p.get('query'),str) or not\
+          \ p['query'].strip():raise ValueError('Nonempty diagnostic question required')\n\
+          \ return {'body':json.dumps({'input':json.dumps({'query':p['query']},ensure_ascii=False)},ensure_ascii=False),'query':p['query']}\n"
+        variables:
+        - variable: input
+          value_selector:
+          - start
+          - input
+        outputs:
+          body:
+            type: string
+            children: null
+          query:
+            type: string
+            children: null
+      sourcePosition: right
+      targetPosition: left
+    - id: locate
+      type: custom
+      position:
+        x: 600
+        y: 100
+      positionAbsolute:
+        x: 600
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: Function_Locator
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/Function_Locator'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#input.body#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+      sourcePosition: right
+      targetPosition: left
+    - id: located
+      type: custom
+      position:
+        x: 900
+        y: 100
+      positionAbsolute:
+        x: 900
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 候选与原始来源
+        code_language: python3
+        code: "import json\ndef main(body: str):\n r=json.loads(json.loads(body)['result'])\n\
+          \ if r['status']!='ok' or len(r['data'])!=3:raise ValueError('Three sourced\
+          \ candidates required')\n return {'ids':[x['id'] for x in r['data']],'candidates':json.dumps(r,ensure_ascii=False)}\n"
+        variables:
+        - variable: body
+          value_selector:
+          - locate
+          - body
+        outputs:
+          ids:
+            type: array[string]
+            children: null
+          candidates:
+            type: string
+            children: null
+      sourcePosition: right
+      targetPosition: left
+    - id: confirm
+      type: custom
+      position:
+        x: 1200
+        y: 100
+      positionAbsolute:
+        x: 1200
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: human-input
+        title: 用户确认失效功能
+        form_content: '请根据现象确认功能。
+
+          {{#located.candidates#}}
+
+          {{#$output.function_id#}}'
+        inputs:
+        - type: select
+          output_variable_name: function_id
+          option_source:
+            type: variable
+            selector:
+            - located
+            - ids
+            value: []
+        user_actions:
+        - id: approve
+          title: 确认并检索
+          button_style: primary
+        delivery_methods:
+        - type: webapp
+          enabled: true
+          config: {}
+        timeout: 24
+        timeout_unit: hour
+      sourcePosition: right
+      targetPosition: left
+    - id: arguments
+      type: custom
+      position:
+        x: 1500
+        y: 100
+      positionAbsolute:
+        x: 1500
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 确认后准备分支
+        code_language: python3
+        code: "import json\ndef main(function_id: str, candidates: str, query: str):\n\
+          \ located=json.loads(candidates)\n function=next(r for r in located['data']\
+          \ if r['id']==function_id)\n out={'function':json.dumps(function,ensure_ascii=False),'version':located['corpus_version']}\n\
+          \ for n in ['FTA_Query','FMECA_Query','RBD_Query','Fault_History_Query']:\n\
+          \  q=function_id if n in ['FTA_Query','RBD_Query'] else query\n  out[n]=json.dumps({'input':json.dumps({'query':q,'function_id':function_id},ensure_ascii=False)},ensure_ascii=False)\n\
+          \ return out\n"
+        variables:
+        - variable: function_id
+          value_selector:
+          - confirm
+          - function_id
+        - variable: candidates
+          value_selector:
+          - located
+          - candidates
+        - variable: query
+          value_selector:
+          - input
+          - query
+        outputs:
+          function:
+            type: string
+            children: null
+          version:
+            type: string
+            children: null
+          FTA_Query:
+            type: string
+            children: null
+          FMECA_Query:
+            type: string
+            children: null
+          RBD_Query:
+            type: string
+            children: null
+          Fault_History_Query:
+            type: string
+            children: null
+      sourcePosition: right
+      targetPosition: left
+    - id: FTA_Query
+      type: custom
+      position:
+        x: 1800
+        y: 0
+      positionAbsolute:
+        x: 1800
+        y: 0
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: FTA_Query
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/FTA_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#arguments.FTA_Query#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        error_strategy: default-value
+        default_value:
+        - key: body
+          type: string
+          value: '{"result": "{\"status\": \"error\", \"data\": [], \"evidence\":
+            [], \"missing_fields\": [], \"coverage\": {}, \"error\": \"分支服务重试后仍未完成\"}"}'
+      sourcePosition: right
+      targetPosition: left
+    - id: FMECA_Query
+      type: custom
+      position:
+        x: 1800
+        y: 150
+      positionAbsolute:
+        x: 1800
+        y: 150
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: FMECA_Query
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/FMECA_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#arguments.FMECA_Query#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        error_strategy: default-value
+        default_value:
+        - key: body
+          type: string
+          value: '{"result": "{\"status\": \"error\", \"data\": [], \"evidence\":
+            [], \"missing_fields\": [], \"coverage\": {}, \"error\": \"分支服务重试后仍未完成\"}"}'
+      sourcePosition: right
+      targetPosition: left
+    - id: RBD_Query
+      type: custom
+      position:
+        x: 1800
+        y: 300
+      positionAbsolute:
+        x: 1800
+        y: 300
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: RBD_Query
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/RBD_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#arguments.RBD_Query#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        error_strategy: default-value
+        default_value:
+        - key: body
+          type: string
+          value: '{"result": "{\"status\": \"error\", \"data\": [], \"evidence\":
+            [], \"missing_fields\": [], \"coverage\": {}, \"error\": \"分支服务重试后仍未完成\"}"}'
+      sourcePosition: right
+      targetPosition: left
+    - id: Fault_History_Query
+      type: custom
+      position:
+        x: 1800
+        y: 450
+      positionAbsolute:
+        x: 1800
+        y: 450
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: http-request
+        title: Fault_History_Query
+        method: post
+        url: '{{#env.TOOL_SERVICE_URL#}}/internal/tools/Fault_History_Query'
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type:application/json
+
+          Authorization:Bearer {{#env.INTERNAL_TOOL_TOKEN#}}'
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - id: body
+            key: ''
+            type: text
+            value: '{{#arguments.Fault_History_Query#}}'
+        timeout:
+          max_connect_timeout: 10
+          max_read_timeout: 120
+          max_write_timeout: 30
+        retry_config:
+          retry_enabled: true
+          max_retries: 1
+          retry_interval: 200
+        variables: []
+        error_strategy: default-value
+        default_value:
+        - key: body
+          type: string
+          value: '{"result": "{\"status\": \"error\", \"data\": [], \"evidence\":
+            [], \"missing_fields\": [], \"coverage\": {}, \"error\": \"分支服务重试后仍未完成\"}"}'
+      sourcePosition: right
+      targetPosition: left
+    - id: merge
+      type: custom
+      position:
+        x: 2100
+        y: 100
+      positionAbsolute:
+        x: 2100
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: code
+        title: 合并四路实际结果
+        code_language: python3
+        code: "import json\ndef main(function: str, version: str, fta: str, fmeca:\
+          \ str, rbd: str, history: str):\n names=['FTA_Query','FMECA_Query','RBD_Query','Fault_History_Query']\n\
+          \ values=[]\n for body in [fta,fmeca,rbd,history]:\n  try:\n   v=json.loads(json.loads(body)['result'])\n\
+          \   if not isinstance(v,dict) or v.get('status') not in ['ok','not_found','not_covered','error','needs_input']\
+          \ or not isinstance(v.get('evidence'),list):raise ValueError('Invalid branch\
+          \ shape')\n   if v['status']=='error' and not v.get('corpus_version'):v['corpus_version']=version\n\
+          \   if v.get('corpus_version')!=version:raise ValueError('Knowledge version\
+          \ differs')\n  except (ValueError,KeyError,TypeError):\n   v={'status':'error','data':[],'evidence':[],'missing_fields':[],'coverage':{},'error':'分支返回格式或知识版本校验失败','corpus_version':version}\n\
+          \  values.append(v)\n failed=[n for n,v in zip(names,values) if v['status']=='error']\n\
+          \ missing=[n for n,v in zip(names,values) if v['status']=='needs_input']\n\
+          \ result={'status':'error' if failed else 'needs_input' if missing else\
+          \ 'ok','data':{'function':json.loads(function),'branches':dict(zip(names,values))},\n\
+          \  'evidence':list({e['id']:e for v in values for e in v['evidence']}.values()),'missing_fields':[],\n\
+          \  'coverage':{n:v['status'] for n,v in zip(names,values)},'error':'、'.join(failed)\
+          \ if failed else None,'corpus_version':version}\n return {'result':json.dumps(result,ensure_ascii=False)}\n"
+        variables:
+        - variable: function
+          value_selector:
+          - arguments
+          - function
+        - variable: version
+          value_selector:
+          - arguments
+          - version
+        - variable: fta
+          value_selector:
+          - FTA_Query
+          - body
+        - variable: fmeca
+          value_selector:
+          - FMECA_Query
+          - body
+        - variable: rbd
+          value_selector:
+          - RBD_Query
+          - body
+        - variable: history
+          value_selector:
+          - Fault_History_Query
+          - body
+        outputs:
+          result:
+            type: string
+            children: null
+      sourcePosition: right
+      targetPosition: left
+    - id: end
+      type: custom
+      position:
+        x: 2400
+        y: 100
+      positionAbsolute:
+        x: 2400
+        y: 100
+      width: 244
+      height: 100
+      data:
+        selected: false
+        desc: ''
+        type: end
+        title: 输出四路诊断证据
+        outputs:
+        - variable: result
+          value_selector:
+          - merge
+          - result
+      sourcePosition: right
+      targetPosition: left
+    edges:
+    - id: start-source-input
+      type: custom
+      source: start
+      sourceHandle: source
+      target: input
+      targetHandle: target
+      data:
+        sourceType: start
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: input-source-locate
+      type: custom
+      source: input
+      sourceHandle: source
+      target: locate
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: locate-source-located
+      type: custom
+      source: locate
+      sourceHandle: source
+      target: located
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: located-source-confirm
+      type: custom
+      source: located
+      sourceHandle: source
+      target: confirm
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: human-input
+        isInIteration: false
+        isInLoop: false
+    - id: confirm-approve-arguments
+      type: custom
+      source: confirm
+      sourceHandle: approve
+      target: arguments
+      targetHandle: target
+      data:
+        sourceType: human-input
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: arguments-source-FTA_Query
+      type: custom
+      source: arguments
+      sourceHandle: source
+      target: FTA_Query
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: FTA_Query-source-merge
+      type: custom
+      source: FTA_Query
+      sourceHandle: source
+      target: merge
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: arguments-source-FMECA_Query
+      type: custom
+      source: arguments
+      sourceHandle: source
+      target: FMECA_Query
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: FMECA_Query-source-merge
+      type: custom
+      source: FMECA_Query
+      sourceHandle: source
+      target: merge
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: arguments-source-RBD_Query
+      type: custom
+      source: arguments
+      sourceHandle: source
+      target: RBD_Query
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: RBD_Query-source-merge
+      type: custom
+      source: RBD_Query
+      sourceHandle: source
+      target: merge
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: arguments-source-Fault_History_Query
+      type: custom
+      source: arguments
+      sourceHandle: source
+      target: Fault_History_Query
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: Fault_History_Query-source-merge
+      type: custom
+      source: Fault_History_Query
+      sourceHandle: source
+      target: merge
+      targetHandle: target
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: merge-source-end
+      type: custom
+      source: merge
+      sourceHandle: source
+      target: end
+      targetHandle: target
+      data:
+        sourceType: code
+        targetType: end
+        isInIteration: false
+        isInLoop: false
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.6

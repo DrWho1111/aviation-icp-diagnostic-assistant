@@ -1,0 +1,24 @@
+name: icp-final-validation
+services:
+  app:
+    image: icp-final-validation:20261024
+    env_file: ../.secrets/validation.env
+    ports: ['127.0.0.1:8002:8000']
+    volumes: ['validation_runtime:/app/data/runtime']
+    secrets: [tool_keys,native_diagnosis,native_main]
+    extra_hosts: ['host.docker.internal:host-gateway']
+    healthcheck:
+      test: ['CMD','python','-c','import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/api/health")']
+      interval: 5s
+      retries: 12
+secrets:
+  tool_keys:
+    file: ../.secrets/validation-tool-keys.json
+  native_diagnosis:
+    file: ../.secrets/dify-native-diagnosis.json
+  native_main:
+    file: ../.secrets/dify-native-main.json
+volumes:
+  validation_runtime:
+    external: true
+    name: icp-final-native-validation-20261024

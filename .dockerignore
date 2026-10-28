@@ -1,0 +1,16 @@
+.git
+.venv
+.tools
+.models
+.secrets
+.env
+.env.*
+node_modules
+frontend/node_modules
+data/runtime
+outputs/*
+!outputs/evaluation.json
+deploy/vendor
+__pycache__
+.pytest_cache
+
